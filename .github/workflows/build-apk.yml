@@ -20,7 +20,10 @@ jobs:
 
       - name: Check ZIP file
         run: |
-          test -f hybrid_v4_android_starter.zip
+          if [ ! -f hybrid_v4_android_starter.zip ]; then
+            echo "ERROR: Starter ZIP file not found."
+            exit 1
+          fi
 
       - name: Extract Android project
         run: |
@@ -34,10 +37,15 @@ jobs:
             \( -name settings.gradle -o -name settings.gradle.kts \) \
             -print -quit | xargs -r dirname)
 
-          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/build.gradle" ]; then
-            echo "ERROR: Android Gradle project files are missing."
-            echo "The ZIP must contain settings.gradle and build.gradle."
-            find extracted -maxdepth 5 -type f | head -100
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: No Android Gradle project found in the ZIP."
+            find extracted -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+
+          if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
+             [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
+            echo "ERROR: Gradle build file is missing."
             exit 1
           fi
 
@@ -50,13 +58,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-            - name: Set up Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK components
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Install Gradle
         run: |
