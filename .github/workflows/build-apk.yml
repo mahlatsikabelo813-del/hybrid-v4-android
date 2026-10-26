@@ -14,14 +14,18 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check ZIP file
+      - name: Check starter ZIP
         run: |
           if [ ! -f hybrid_v4_android_starter.zip ]; then
-            echo "ERROR: Starter ZIP file not found."
+            echo "ERROR: Starter ZIP not found."
             exit 1
           fi
 
@@ -38,14 +42,14 @@ jobs:
             -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: No Android Gradle project found in the ZIP."
+            echo "ERROR: No Gradle project found in ZIP."
             find extracted -maxdepth 4 -type f | head -100
             exit 1
           fi
 
           if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
              [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
-            echo "ERROR: Gradle build file is missing."
+            echo "ERROR: Gradle build file missing."
             exit 1
           fi
 
@@ -58,13 +62,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android SDK components
+        shell: bash
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager \
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
+            -type f -name sdkmanager -print -quit)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found."
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
