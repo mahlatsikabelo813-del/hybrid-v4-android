@@ -18,30 +18,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check ZIP file
+        run: |
+          test -f hybrid_v4_android_starter.zip
+
       - name: Extract Android project
         run: |
-          unzip -q hybrid_v4_android_starter.zip -d source
-          echo "ZIP extracted successfully"
-          find source -maxdepth 5 -type f \( \
-            -name "gradlew" -o \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) -print
+          mkdir -p extracted
+          unzip -q hybrid_v4_android_starter.zip -d extracted
 
       - name: Find Gradle project
-        id: project
-        shell: bash
         run: |
-          WRAPPER=$(find source -type f -name gradlew -print -quit)
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -print -quit | xargs -r dirname)
 
-          if [ -z "$WRAPPER" ]; then
-            echo "ERROR: No Gradle wrapper found in the ZIP."
-            echo "The Android project files may be missing."
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/build.gradle" ]; then
+            echo "ERROR: Android Gradle project files are missing."
+            echo "The ZIP must contain settings.gradle and build.gradle."
+            find extracted -maxdepth 5 -type f | head -100
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$WRAPPER")
-          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -49,15 +50,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Build APK
-        working-directory: ${{ steps.project.outputs.dir }}
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Gradle
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          wget -q https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          unzip -q gradle-8.9-bin.zip -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Build APK
+        run: |
+          gradle -p "$PROJECT_DIR" assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Hybrid-V4-Android-APK
-          path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/*.apk
+          path: extracted/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
